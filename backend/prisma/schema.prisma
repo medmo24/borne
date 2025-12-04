@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TECHNICIAN
+  SUPERVISOR
+  ENTERPRISE_CLIENT
+}
+
+enum StationStatus {
+  ONLINE
+  OFFLINE
+  CHARGING
+  FAULTED
+  AVAILABLE
+}
+
+enum ConnectorStatus {
+  AVAILABLE
+  PREPARING
+  CHARGING
+  SUSPENDED_EVSE
+  SUSPENDED_EV
+  FINISHING
+  RESERVED
+  UNAVAILABLE
+  FAULTED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  firstName String?
+  lastName  String?
+  role      Role     @default(ENTERPRISE_CLIENT)
+  rfidTags  RfidTag[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Station {
+  id              String        @id @default(uuid())
+  chargePointId   String        @unique // The identity used in OCPP
+  name            String?
+  brand           String?
+  model           String?
+  serialNumber    String?
+  firmwareVersion String?
+  status          StationStatus @default(OFFLINE)
+  lastHeartbeat   DateTime?
+  ipAddress       String?
+  connectors      Connector[]
+  transactions    Transaction[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Connector {
+  id        String          @id @default(uuid())
+  connectorId Int           // 1-based index as per OCPP
+  stationId String
+  station   Station         @relation(fields: [stationId], references: [id])
+  status    ConnectorStatus @default(UNAVAILABLE)
+  power     Float?          // Current power in kW
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@unique([stationId, connectorId])
+}
+
+model RfidTag {
+  id        String   @id @default(uuid())
+  uid       String   @unique // The hex UID of the card
+  active    Boolean  @default(true)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  transactions Transaction[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Transaction {
+  id             String    @id @default(uuid()) // Internal ID
+  ocppTransactionId Int?   // ID assigned by the Charge Point (can be null if not yet started)
+  stationId      String
+  station        Station   @relation(fields: [stationId], references: [id])
+  rfidTagId      String?
+  rfidTag        RfidTag?  @relation(fields: [rfidTagId], references: [id])
+  startTime      DateTime
+  endTime        DateTime?
+  meterStart     Float     // Wh
+  meterStop      Float?    // Wh
+  totalEnergy    Float?    // kWh
+  cost           Float?
+  status         String    // Started, Stopped, etc.
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
